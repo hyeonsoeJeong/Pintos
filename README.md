@@ -1,7 +1,11 @@
 2025/07/16
 
-ADD
- - function bool compare_waketime()
+thread.c
+ - add function : bool compare_waketime()
+ - add function which returns the minimum local wake_time : min_waketime()
+   used at timer_interrupt() as a conditional 
+ - adjust add_to_sleep() : now sleep list is sorted by wake_time ascending order
 
-Edit 
- - Adjust add_to_sleep() : now sleep list is sorted by wake_time ascending order
+timer.c 
+ 
+ - timer_interrupt() : add condition to call wakeup_thread; when (current tick) >= (minimum wake_time)
