@@ -224,16 +224,31 @@ thread_block (void)
 
   struct thread *t = thread_current();
   ASSERT (is_thread(t));
-  ASSERT (t->status == THREAD_RUNNING);
 
   t->status = THREAD_BLOCKED;
-
-  // if the local timer is set, add the thread to the sleep list
-  if(t->wake_time) {
-    list_push_back(&sleep_list, &t->elem);
-  }
   
   schedule ();
+}
+
+
+// function used in list_insert_ordered() : for priority scheduling
+// returns true if thread a has bigger priority than thread b; else return false
+bool compare_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *thread_a, *thread_b;
+  thread_a = list_entry(a, struct thread, elem);
+  thread_b = list_entry(b, struct thread, elem);
+  
+  return thread_a->priority > thread_b->priority;
+}
+
+// function used in list_insert_ordered() : for sorting sleep_list with wake_time
+// returns true if thread a has bigger priority than thread b; else return false
+bool compare_waketime (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+  struct thread *thread_a, *thread_b;
+  thread_a = list_entry(a, struct thread, elem);
+  thread_b = list_entry(b, struct thread, elem);
+  
+  return thread_a->wake_time < thread_b->wake_time;
 }
 
 /* Transitions a blocked thread T to the ready-to-run state.
@@ -257,7 +272,10 @@ thread_unblock (struct thread *t)
   
   // 여기서는 sleep_list 다루지 않음 
   // wakeup function에서 이미 thread가 sleeping list로부터 제거되었다 가정
-  list_push_back (&ready_list, &t->elem);   // add it to ready list
+  //list_push_back (&ready_list, &t->elem);   // add it to ready list
+  
+  // Add thread to ready list in order of priority
+  list_insert_ordered(&ready_list, &t->elem, compare_priority, NULL);
   intr_set_level (old_level);
 }
 
@@ -615,23 +633,59 @@ void wakeup_thread() {
 
   ASSERT(intr_get_level() == INTR_OFF);         // wakeup_thread() is called in timer interrupt context
 
+  int tick = timer_ticks();
   struct list_elem *e = list_begin(&sleep_list);
   while (e != list_end(&sleep_list)) {
     struct thread *t = list_entry (e, struct thread, elem); // get struct thread's address
     ASSERT(t->status == THREAD_BLOCKED);        // every threads' states in sleep list is blocked
     
-    struct list_elem *next = list_next(e);           // get next list elem before removal
+    // return condition
+    if (t->wake_time > tick) {
+      // since sleep list is sorted in ascending wake_time, no need to check rest of them
+      return;
+    }
 
-    // Check wake_time at each thread structure
-    if(t->wake_time <= timer_ticks()) {
+    // thread needs to wake up (tick >= wake_time)
+    else {
+      struct list_elem *next = list_next(e);    // get next list elem before removal
+
       // clear the local timer
       t->wake_time = 0;
       // remove the thread from sleep list 
       list_remove(e);                           
       // insert thread to ready list & change state to running
-      thread_unblock(t);                        
-    }
+      thread_unblock(t);                     
 
-    e = next;               // update elem to next one
+      e = next;             // update elem to next one   
+    }   
   }
+    
+}
+
+
+// function to add current thread to sleep list in ascending order of wake_time
+// called in timer_sleep 
+void add_to_sleep_list() {
+  ASSERT (intr_get_level () == INTR_OFF);
+
+  struct thread *cur = thread_current();
+
+  ASSERT(is_thread(cur));
+ 
+  // put current thread to sleep list, ordered by wake_time ascending
+  list_insert_ordered(&sleep_list, &cur->elem, compare_waketime, NULL);
+}
+
+// function returns minimum wake_time of thread in sleep list
+// called in timer_interrupt() to check whether calling wakeup_thread() is neccessary
+int64_t min_waketime() {
+  if (sleep_list.head.next == NULL) {
+    // return 0 if sleep list is empty
+    return 0;
+  }
+  // get the first thread in sleep list 
+  struct thread *head_sleep = list_entry(sleep_list.head.next, struct thread, elem);
+  ASSERT(head_sleep->wake_time);
+
+  return head_sleep->wake_time;
 }

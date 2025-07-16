@@ -99,7 +99,8 @@ timer_sleep (int64_t ticks)
   // set up the local timer
   cur->wake_time = ticks + start;             // save wake time at thread struct
 
-  
+  // thread를 sleeping list 에 추가
+  add_to_sleep_list();
 
   // thread_block() 호출 추가
   thread_block();
@@ -187,10 +188,12 @@ timer_interrupt (struct intr_frame *args UNUSED)
 {
   ticks++;
 
-  // wake up function 추가 
-  wakeup_thread();
-
-  thread_tick ();
+  // call wake up function only when (current tick) >= (minimum local tick) AND sleep_list isn't empty
+  if (ticks >= min_waketime() && min_waketime()) {
+    wakeup_thread();
+  }
+  
+  thread_tick (); 
 }
 
 
