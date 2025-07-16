@@ -8,4 +8,4 @@ thread.c
 
 timer.c 
  
- - timer_interrupt() : add condition to call wakeup_thread; when (current tick) >= (minimum wake_time)
+ - timer_interrupt() : add condition to call wakeup_thread; call when (current tick) >= (minimum wake_time) AND sleep_list isn't empty (min_waketime() != 0)
