@@ -89,6 +89,8 @@ timer_elapsed (int64_t then)
 void
 timer_sleep (int64_t ticks) 
 {
+  if (ticks <= 0) return;
+
   // interrupt block
   enum intr_level old_level = intr_disable();
 
