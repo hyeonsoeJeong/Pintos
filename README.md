@@ -11,6 +11,20 @@ thread.c
 timer.c  
  - timer_interrupt() : add condition to call wakeup_thread; call when (current tick) >= (minimum wake_time) AND sleep_list isn't empty (min_waketime() != 0)
 
+2025/07/21
+
+timer.c
+  - timer_sleep(ticks) : add if clause to check whether ticks <= 0, return without sleeping the thread if it is
+
+
 TO DO
  - priority donation
- - sync
+   priority is donated when a thread fails to acquire the lock
+   check the donated thread's condition for possible nested or multiple locks
+
+ - Advanced scheduler
+   * No priority donation
+   * Scheduling algorithm should be set at Pintos start time
+   * priority argument to thread_create() should be ignored, as well as any
+     calls to thread_set_priority(), and thread_get_priority() should return the thread’s current priority as set by the scheduler
+
