@@ -215,10 +215,75 @@ lock_try_acquire (struct lock *lock)
   ASSERT (!lock_held_by_current_thread (lock));
 
   success = sema_try_down (&lock->semaphore);
-  if (success)
-    lock->holder = thread_current ();
+  if (success) {
+    //lock->holder = thread_current ();
+
+    lock_acquire(lock);
+  }
+
+  // Lock acquire fail : donate priority, block thread
+  else {
+    struct thread *t = thread_current();
+    t->master = lock;
+
+    list_push_back(&lock->semaphore.waiters, &t->elem);
+    
+    t->master->holder->prior_priority = t->master->holder->priority;
+
+    // donate priority through the chain recursively
+    priority_float(t);
+    
+    thread_block();
+
+  }
   return success;
 }
+
+
+// function to donate priority through nested chain of lock
+// If the given thread is waiter of a lock and its priority is bigger than the holder,
+// donate the priority
+/*  Example case
+    [lock 1]
+    - holder : thread A (priority 10)
+    - waiters : thread B (priority 20)
+
+    [lock 2]
+    - holder : thread B (priority 20)
+    - waiters : thread C (priority 30), thread D (priority 40)
+
+    In order to release lock 2, lock 1 has to be released, so thread D's priority
+    should be donated to both lock 1 and lock 2's holders, which is thread A, B
+    i.e. priority of thread A and B both become 40
+    
+  By calling priority_float(thread D), D's priority floats to the up most holder
+  of the lock chain
+*/
+void priority_float(struct thread* t) {
+  ASSERT(t->master != NULL);
+  ASSERT(t->master->holder != NULL);
+
+  // first save the lock holder's priority
+  struct thread *holder = t->master->holder;
+  holder->prior_priority = holder->priority;
+  
+  // no need to donate if holder's priority is bigger
+  if(t->priority <= holder->priority ) {
+    return;
+  }        
+  // waiter's priority is bigger, so doante it to holder
+  holder->priority = t->priority;
+
+  // check whehter recursive call is neccessary i.e. Is holder also waiter?
+  // return if holder isn't waiting for other lock
+  if (holder->master == NULL) return; 
+  
+  // recursively call the function again if deeper lock exists
+  priority_float(holder->master->holder);
+
+}
+
+
 
 /* Releases LOCK, which must be owned by the current thread.
 
@@ -231,6 +296,7 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  lock->holder->priority = lock->holder->prior_priority;
   lock->holder = NULL;
   sema_up (&lock->semaphore);
 }

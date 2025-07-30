@@ -88,6 +88,9 @@ struct thread
     char name[16];                      /* Name (for debugging purposes). */
     uint8_t *stack;                     /* Saved stack pointer. */
     int priority;                       /* Priority. */
+    // 원본 priority
+    int prior_priority;                 // Priority before donation
+    struct lock *master;                // Waiting for the lock to be released
     struct list_elem allelem;           /* List element for all threads list. */
     int64_t wake_time;                  // time to wake up
 
