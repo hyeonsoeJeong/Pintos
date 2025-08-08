@@ -16,6 +16,9 @@ timer.c
 timer.c
   - timer_sleep(ticks) : add if clause to check whether ticks <= 0, return without sleeping the thread if it is
 
+2025/08/08
+lock release에서 priority가 클 경우 현재 thread를 yeild 하는 로직 추가
+
 
 TO DO
  - priority donation

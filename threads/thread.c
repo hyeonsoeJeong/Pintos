@@ -207,6 +207,11 @@ thread_create (const char *name, int priority,
   /* Add to run queue. */
   thread_unblock (t);
 
+  // if new thread's priority is bigger, yeild current thread
+  if (thread_current()->priority < priority) {
+    thread_yield();
+  }
+
   return tid;
 }
 
@@ -500,7 +505,7 @@ init_thread (struct thread *t, const char *name, int priority)
   strlcpy (t->name, name, sizeof t->name);
   t->stack = (uint8_t *) t + PGSIZE;
   t->priority = priority;
-  t->prior_priority = priority;
+  t->prior_priority = priority; // to check whether pirority has been donated
   t->master = NULL;
   t->magic = THREAD_MAGIC;
   t->wake_time = 0;

@@ -113,10 +113,12 @@ sema_up (struct semaphore *sema)
   ASSERT (sema != NULL);
 
   old_level = intr_disable ();
-  if (!list_empty (&sema->waiters)) 
-    thread_unblock (list_entry (list_pop_front (&sema->waiters),
-                                struct thread, elem));
+  while (!list_empty (&sema->waiters)) {
+    thread_unblock (list_entry (list_pop_front (&sema->waiters), struct thread, elem));
+  }
   sema->value++;
+  
+
   intr_set_level (old_level);
 }
 
@@ -195,9 +197,20 @@ lock_acquire (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
+  
+  if (lock->holder != NULL) {
+    //printf("working\n\n");
+    struct thread *t = thread_current();
+    t->master = lock;
+    
 
+    // donate priority through the chain recursively
+    priority_float(t);
+  }
+  
   sema_down (&lock->semaphore);
   lock->holder = thread_current ();
+  ASSERT(1);
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -216,28 +229,14 @@ lock_try_acquire (struct lock *lock)
 
   success = sema_try_down (&lock->semaphore);
   if (success) {
-    //lock->holder = thread_current ();
-
-    lock_acquire(lock);
+    lock->holder = thread_current();
   }
 
-  // Lock acquire fail : donate priority, block thread
-  else {
-    struct thread *t = thread_current();
-    t->master = lock;
-
-    list_push_back(&lock->semaphore.waiters, &t->elem);
-    
-    t->master->holder->prior_priority = t->master->holder->priority;
-
-    // donate priority through the chain recursively
-    priority_float(t);
-    
-    thread_block();
-
-  }
+  // Lock acquire fail : return
   return success;
 }
+
+
 
 
 // function to donate priority through nested chain of lock
@@ -265,12 +264,13 @@ void priority_float(struct thread* t) {
 
   // first save the lock holder's priority
   struct thread *holder = t->master->holder;
-  holder->prior_priority = holder->priority;
-  
+
+
   // no need to donate if holder's priority is bigger
   if(t->priority <= holder->priority ) {
     return;
   }        
+  
   // waiter's priority is bigger, so doante it to holder
   holder->priority = t->priority;
 
@@ -279,7 +279,7 @@ void priority_float(struct thread* t) {
   if (holder->master == NULL) return; 
   
   // recursively call the function again if deeper lock exists
-  priority_float(holder->master->holder);
+  priority_float(holder);
 
 }
 
@@ -296,9 +296,16 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
+  bool donated = lock->holder->priority > lock->holder->prior_priority;
+
   lock->holder->priority = lock->holder->prior_priority;
+  
   lock->holder = NULL;
   sema_up (&lock->semaphore);
+  if(donated) {
+    thread_yield();
+  }
+
 }
 
 /* Returns true if the current thread holds LOCK, false
